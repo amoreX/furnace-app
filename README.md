@@ -68,6 +68,20 @@ These are the deliberate choices for this project. Written down on purpose:
    token-by-token (ChatGPT style) via Redis Pub/Sub behind GraphQL subscriptions/SSE.
 4. **DataLoader is mandatory** for any nested resolver (e.g. messages within a list
    of conversations) to prevent N+1 queries against Postgres.
+5. **This is a web app for the [furnace](../furnace) harness** — the local-first
+   terminal coding agent. The chat data model mirrors furnace's **entry-tree**
+   session model (`Session ──< Entry`, with a Pi-style active-leaf pointer and
+   forking), not a flat message list.
+6. **Hosting (researched): Neon (Postgres) + Railway (server + co-located Redis)**,
+   ~$5–10/mo at solo stage. A long-lived container, **not** serverless — GraphQL
+   subscriptions need a persistent WebSocket process.
+7. **Agent execution runs server-side in a per-session sandbox** (recommended over
+   a local bridge). The repo is cloned into the sandbox; furnace's file/bash tools
+   run inside it. See the design doc for the trade-off.
+
+> **Full architecture recommendation** — data model, GraphQL API shape,
+> streaming/turn lifecycle, execution model, hosting, and the build plan:
+> **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
