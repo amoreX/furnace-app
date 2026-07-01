@@ -151,26 +151,31 @@ Tight recaps so we can revisit. Most detail is in chat history + ARCHITECTURE.md
 
 ---
 
-## Current task: AUTH (email + password)
+## ✅ DONE: AUTH (email + password, REST + JWT)
 
-Decided 2026-06-30: build **email + password** auth first (plan B, not OAuth yet).
-Order: **scaffold auth first (fake/in-memory store) → then Prisma + Neon → link up.**
+Built 2026-06-30. Email+password auth as **REST routes** (not GraphQL) + JWT.
 
-Pieces:
-- `signup(email, password)` → hash pw → store user → return token
-- `login(email, password)` → check pw hash → return token
-- libs: `bcrypt` (hash pw), `jsonwebtoken` (make/verify JWT)
-- shape as **GraphQL mutations** (fits the learn-GraphQL goal; email+pw is one-shot
-  so a mutation is fine — the OAuth `/auth/*` HTTP routes come later)
-- auth context: verify `Authorization: Bearer <jwt>` on each request → `me`
+- **DB: Drizzle + Neon** (chose over Prisma; chose Neon over Supabase = build backend
+  ourselves). Files: `src/db/schema.ts`, `src/db/index.ts`, `drizzle.config.ts`.
+  `users` table live in neon. `schemaFilter: ["public"]` so push leaves `neon_auth` alone.
+  drizzle v1: `drizzle(process.env.DATABASE_URL)` (string form, no schema arg).
+- **Routes** (`/api/auth/*`): `POST /signup`, `POST /login`. (route→controller→service.)
+- **services** (`auth.services.ts`): `signup` (bcrypt.hash + insert), `login`
+  (bcrypt.compare). Both return `{ result, message, token }`.
+- **JWT utils** (`src/utils/jwt.ts`): `signToken(userId)` (7d), `verifyToken(token)`.
+  Token payload = `{ userId }` (= user's uuid `id`).
+- **middleware** (`src/middleware/requireAuth.ts`): reads `Authorization: Bearer`,
+  `verifyToken`, stamps `req.userId`. Slap on any protected route. Not on signup/login.
+- **logging**: `morgan("dev")` in `index.ts`.
+- libs: `bcryptjs`, `jsonwebtoken`, `drizzle-orm`, `@neondatabase/serverless`, `morgan`.
 
-Later: swap fake store → real `users` table.
+Mental model (confirmed): token given on signup/login → client saves it → sends
+`Bearer` on every req → `requireAuth` decodes → `req.userId` → controller → service.
+Client never sends userId (untrusted); it's derived from the signed token.
 
-**DB choice (2026-06-30): Drizzle + Neon** (changed from Prisma). Files:
-`src/db/schema.ts` (tables), `src/db/index.ts` (client), `drizzle.config.ts`.
-`npx drizzle-kit push` to sync. Use `db.insert/select` in services.
-⚠️ `docs/ARCHITECTURE.md` schema is still written in **Prisma syntax** — needs a
-pass to convert to Drizzle (logic/columns identical, just syntax).
+⚠️ `docs/ARCHITECTURE.md` schema still written in **Prisma syntax** — convert to
+Drizzle later (logic/columns identical).
+⚠️ Auth is **REST**; chat will be **GraphQL** — need to bridge JWT into Apollo context.
 
 ## Open questions / next up
 

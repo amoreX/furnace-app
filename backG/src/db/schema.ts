@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 // User — furnace-app addition (furnace has no users). Mirrors ARCHITECTURE.md §4.1,
 // plus passHash for email+password auth. githubId added later at the OAuth phase.
@@ -9,6 +9,38 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passHash: text("pass_hash").notNull(),
   name: text("name"),
-  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const sessions = pgTable("sessions", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  cwd: text("cwd").notNull(),
+  activeLeafId: text("active_leaf_id"),
+  parentSessionId: text("parent_session_id"),
+  forkedFromEntryId: text("forked_from_entry_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  archivedAt: timestamp("archived_at"),
+});
+
+export const entries = pgTable("entries", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => sessions.id),
+  // Soft tree link (entry → entry before it). Root = null. Enforced in code, not DB.
+  parentEntryId: text("parent_entry_id"),
+  // message | tool_call | tool_result | compaction | branch_summary | model_change | custom
+  type: text("type").notNull(),
+  role: text("role"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  data: jsonb("data").notNull(), // jsonb to match varying type of content
 });
