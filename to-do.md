@@ -13,49 +13,51 @@ The chat data layer + making GraphQL real. Sits on furnace's entry-tree
 `src/session/store.ts` / `types.ts`.
 
 ### 1. Conversation tables (Drizzle, 1:1 furnace)
-- [ ] In `src/db/schema.ts` add **`sessions`** table — furnace columns:
+- [x] In `src/db/schema.ts` add **`sessions`** table — furnace columns:
       `id, title, cwd, activeLeafId, parentSessionId, forkedFromEntryId,
       createdAt, updatedAt, archivedAt` + scoping `userId` (ref `users.id`).
       *(project/device scoping = later topic; for now just `userId` + `cwd`.)*
-- [ ] Add **`entries`** table: `id, sessionId (ref sessions), parentEntryId,
+- [x] Add **`entries`** table: `id, sessionId (ref sessions), parentEntryId,
       type, role, createdAt, data` (data = `jsonb`).
-- [ ] Entry `type`/`role`: start as plain `text()` (furnace stores text). Optional
+- [x] Entry `type`/`role`: start as plain `text()` (furnace stores text). Optional
       later: drizzle `pgEnum`.
-- [ ] `npx drizzle-kit push` → pick **create**, keep `schemaFilter:["public"]`.
+- [x] `npx drizzle-kit push` → pick **create**, keep `schemaFilter:["public"]`.
 - [ ] (optional) drizzle `relations()` for `db.query.*` — skip for now, use joins/selects.
 
 ### 2. Session store logic (port furnace store.ts)
-- [ ] New `src/services/session.services.ts`.
-- [ ] `createSession(userId, { cwd, title })` → insert, return row.
-- [ ] `listSessions(userId)` → select where `userId`, `archivedAt is null`,
+- [x] New `src/services/session.services.ts`.
+- [x] `createSession(userId, { cwd, title })` → insert, return row.
+- [x] `listSessions(userId)` → select where `userId`, `archivedAt is null`,
       order by `updatedAt desc`.
-- [ ] `getSession(id)` → one row.
-- [ ] `appendEntry(sessionId, type, role, data)` → **the Pi rule** (furnace
+- [x] `getSession(id)` → one row.
+- [x] `appendEntry(sessionId, type, role, data)` → **the Pi rule** (furnace
       store.ts:317): new entry's `parentEntryId = session.activeLeafId`, insert,
       then `update session set activeLeafId = newEntry.id`. Do in a transaction.
-- [ ] `getActivePath(sessionId)` (furnace store.ts:353): load all entries, walk
+- [x] `getActivePath(sessionId)` (furnace store.ts:353): load all entries, walk
       `parentEntryId` from `activeLeafId` up to root, reverse → the path the model sees.
-- [ ] thin helpers: `appendMessage(role, content)`, `appendToolCall`, `appendToolResult`.
+- [x] thin helpers: `appendMessage(role, content)`, `appendToolCall`, `appendToolResult`.
 
 ### 3. GraphQL layer (kill the Todo demo)
-- [ ] Install a JSON scalar: `npm i graphql-scalars` (for `Entry.data`).
-- [ ] In `src/lib/types.ts` replace Todo typeDefs with: `Session`, `Entry`
+- [x] Install a JSON scalar: `npm i graphql-scalars` (for `Entry.data`).
+- [x] In `src/lib/types.ts` replace Todo typeDefs with: `Session`, `Entry`
       (start with `data: JSON` — skip the typed union for now), `Query { sessions,
       session(id), activePath(sessionId) }`, `Mutation { createSession, sendMessage }`.
-- [ ] Resolvers call the session services from step 2.
-- [ ] Apollo already mounted at `/graphql` in `index.ts` — no new wiring needed.
+- [x] Resolvers call the session services from step 2.
+- [x] Apollo already mounted at `/graphql` in `index.ts` — no new wiring needed.
 
 ### 4. Bridge JWT → GraphQL context (auth in resolvers)
-- [ ] In `index.ts`, give `expressMiddleware(apserver, { context })` a `context` fn:
+- [x] In `index.ts`, give `expressMiddleware(apserver, { context })` a `context` fn:
       read `Authorization: Bearer`, `verifyToken()` (reuse `src/utils/jwt.ts`) →
       return `{ userId }`.
-- [ ] Resolvers read `ctx.userId` to scope sessions (your chats vs mine).
-- [ ] Reuse logic, not the express `requireAuth` (that's for REST routes).
+- [x] Resolvers read `ctx.userId` to scope sessions (your chats vs mine).
+      *(+ `requireUser` guard + `requireOwnedSession` — 401/403/404. HARDCODED_USER gone.)*
+- [x] Reuse logic, not the express `requireAuth` (that's for REST routes).
 
 ### 5. sendMessage (echo — NO LLM yet)
-- [ ] `sendMessage(sessionId, content)` mutation: `appendMessage("user", content)`
+- [x] `sendMessage(sessionId, content)` mutation: `appendMessage("user", content)`
       → then append a fake assistant entry (e.g. `"echo: " + content`) → return entries.
-- [ ] Goal: prove entry-tree + `activePath` end-to-end over GraphQL before real AI.
+- [x] Goal: prove entry-tree + `activePath` end-to-end over GraphQL before real AI.
+      *(tested vs real Neon: 2 turns → clean 4-node chain, activeLeafId correct.)*
 
 ---
 

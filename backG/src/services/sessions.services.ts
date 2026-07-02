@@ -95,6 +95,77 @@ export const getActivePath = async (sessionId: string): Promise<Entry[]> => {
   return path.reverse();
 };
 
+// Walk a flat entry list into the root→leaf path ending at `leafId`. Pure, no DB.
+const buildPath = (rows: Entry[], leafId: string | null): Entry[] => {
+  const byId = new Map(rows.map((e) => [e.id, e]));
+  const path: Entry[] = [];
+  let cursor: string | null = leafId;
+  while (cursor) {
+    const entry = byId.get(cursor);
+    if (!entry) break;
+    path.push(entry);
+    cursor = entry.parentEntryId;
+  }
+  return path.reverse();
+};
+
+// Echo-phase turn in ONE transaction: ownership check + user msg + assistant echo
+// + single tip move + activePath read. ~7 round-trips vs ~13 across separate calls.
+// NOTE: when the real LLM lands, user & assistant appends must SPLIT into two
+// transactions — you can't hold a txn open across a multi-second model call.
+export const runEchoTurn = async (
+  sessionId: string,
+  userId: string,
+  content: string,
+): Promise<Entry[]> => {
+  return await db.transaction(async (tx) => {
+    // 1. load session ONCE — doubles as ownership + existence check
+    const [session] = await tx
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, sessionId));
+    if (!session) throw new Error("SESSION_NOT_FOUND");
+    if (session.userId !== userId) throw new Error("SESSION_FORBIDDEN");
+
+    // 2. user entry, chained onto the current tip
+    const [userEntry] = await tx
+      .insert(entries)
+      .values({
+        sessionId,
+        parentEntryId: session.activeLeafId,
+        type: "message",
+        role: "user",
+        data: { content },
+      })
+      .returning();
+
+    // 3. assistant echo, chained onto the user entry
+    const [asstEntry] = await tx
+      .insert(entries)
+      .values({
+        sessionId,
+        parentEntryId: userEntry.id,
+        type: "message",
+        role: "assistant",
+        data: { content: `echo: ${content}` },
+      })
+      .returning();
+
+    // 4. move tip ONCE (to the assistant) + bump updatedAt
+    await tx
+      .update(sessions)
+      .set({ activeLeafId: asstEntry.id, updatedAt: new Date() })
+      .where(eq(sessions.id, sessionId));
+
+    // 5. read all entries + build path (leaf = assistant) — same txn
+    const rows = await tx
+      .select()
+      .from(entries)
+      .where(eq(entries.sessionId, sessionId));
+    return buildPath(rows, asstEntry.id);
+  });
+};
+
 export const appendMessage = (
   sessionId: string,
   role: "user" | "assistant",
